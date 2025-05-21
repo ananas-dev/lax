@@ -57,3 +57,22 @@ std::optional<Rom> Rom::from_file(std::string const& path)
     return Rom{
         .prg_rom = std::move(prg_rom), .chr_rom = std::move(chr_rom), .mapper = mapper, .screen_mirroring = mirroring};
 }
+
+uint8_t Rom::read_prg(uint16_t pc) const
+{
+    if (pc < 0x8000 || pc >= 0xFFFA)
+    {
+        printf("Out of bounds prg read!\n");
+        return 0;
+    }
+
+    return prg_rom[pc - 0x8000];
+}
+
+uint16_t Rom::read_prg_u16(uint16_t pc) const
+{
+    uint16_t low = read_prg(pc);
+    uint16_t high = read_prg(pc + 1);
+
+    return (high << 8) | low;
+}

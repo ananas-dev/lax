@@ -8,6 +8,8 @@
 
 #include <cinttypes>
 
+#include "Rom.h"
+
 enum class InstructionMetadataFields
 {
     IsBranchTarget = 0,
@@ -18,9 +20,9 @@ enum class InstructionMetadataFields
 
 struct Analysis
 {
-    explicit Analysis(uint16_t entry_point, std::span<uint8_t> memory);
+    explicit Analysis(uint16_t entry_point, Rom rom);
 
-    std::span<uint8_t> memory;
+    Rom rom;
 
     uint16_t entry_point;
     uint16_t pc;

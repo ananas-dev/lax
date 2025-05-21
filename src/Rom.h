@@ -20,4 +20,7 @@ struct Rom
     std::vector<uint8_t> chr_rom;
     int mapper;
     Mirroring screen_mirroring;
+
+    [[nodiscard]] uint8_t read_prg(uint16_t pc) const;
+    [[nodiscard]] uint16_t read_prg_u16(uint16_t pc) const;
 };

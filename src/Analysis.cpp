@@ -2,9 +2,9 @@
 
 typedef void (*AnalysisOpFn)(Analysis&);
 
-Analysis::Analysis(uint16_t entry_point, std::span<uint8_t> memory) :
-    entry_point(entry_point), pc(entry_point), last_nz_write(entry_point), last_carry_write(entry_point),
-    last_overflow_write(entry_point), furthest_conditional_branch(entry_point), memory(memory)
+Analysis::Analysis(uint16_t entry_point, Rom rom) :
+    rom(std::move(rom)), entry_point(entry_point), pc(entry_point), last_nz_write(entry_point),
+    last_carry_write(entry_point), last_overflow_write(entry_point), furthest_conditional_branch(entry_point)
 {
 }
 

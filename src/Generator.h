@@ -1,5 +1,6 @@
 #pragma once
 #include <asmjit/x86/x86assembler.h>
+#include <vector>
 #include "Analysis.h"
 
 namespace Cpu
@@ -18,19 +19,35 @@ namespace Cpu
 class Generator
 {
 public:
-    explicit Generator(Analysis analysis);
+    explicit Generator(Analysis analysis, asmjit::x86::Assembler &a);
     void emit_next();
 
-    uint32_t pc;
+    uint16_t pc;
+    uint16_t entry_point;
+    uint16_t exit_point;
     std::unordered_map<uint16_t, Bitset8<InstructionMetadataFields>> instructions;
-    std::span<uint8_t> memory;
-    asmjit::x86::Assembler a;
+    Rom rom;
+    asmjit::x86::Assembler &a;
 
-    uint8_t read();
-    uint16_t read_u16();
+    bool should_stop{false};
+
+    std::vector<asmjit::Label> labels;
+
+    uint8_t Generator::read();
+    uint16_t Generator::read_u16();
 
     void emit_update_nz(const asmjit::x86::Gpd& reg);
 
-private:
-    using InstructionEmitFn = void (Generator::*)();
+    void emit_return();
+
+    void generate()
+    {
+        printf("Range: %u - %u\n", entry_point, exit_point);
+
+        while (pc < exit_point && !should_stop)
+        {
+            printf("PC: %u\n", pc);
+            emit_next();
+        }
+    }
 };

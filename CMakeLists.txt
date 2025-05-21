@@ -22,6 +22,8 @@ add_executable(jit
         src/Bitset8.h
         src/Generator.cpp
         src/Generator.h
+        src/CpuJitRuntime.cpp
+        src/CpuJitRuntime.h
 )
 
 target_link_libraries(jit

@@ -3,14 +3,55 @@
 #include <array>
 #include <asmjit/asmjit.h>
 #include <cassert>
+#include <optional>
 
 #include "Instruction.h"
 
-typedef void (*GeneratorOpFunc)(Generator&);
+typedef void (*EmitFn)(Generator&);
 
-Generator::Generator(Analysis analysis) :
-    pc(analysis.entry_point), instructions(std::move(analysis.instructions)), memory(analysis.memory)
+struct Imm
 {
+    uint8_t value;
+    explicit Imm(uint8_t value) : value(value) {};
+
+    [[nodiscard]] asmjit::Imm to_jit_imm() const { return asmjit::Imm{value}; }
+};
+
+struct Address
+{
+    uint16_t value;
+    explicit Address(uint16_t value) : value(value) {};
+
+    [[nodiscard]] asmjit::x86::Mem to_jit_mem(Generator& gen) const
+    {
+        return asmjit::x86::Mem(reinterpret_cast<uint64_t>(gen.pc.data()) + value);
+    }
+
+    [[nodiscard]] std::optional<asmjit::Label> to_jit_label(Generator& gen) const
+    {
+        if (value >= gen.entry_point && value < gen.exit_point)
+        {
+            return gen.labels[gen.entry_point - value];
+        }
+
+        return {};
+    }
+};
+
+struct Impl
+{
+};
+
+Generator::Generator(Analysis analysis, asmjit::x86::Assembler& a) :
+    pc(analysis.entry_point), entry_point(analysis.entry_point), exit_point(analysis.pc),
+    instructions(std::move(analysis.instructions)), rom(std::move(analysis.rom)), a(a)
+{
+    std::vector<asmjit::Label> labels(exit_point - entry_point);
+
+    for (uint16_t i = entry_point; i < exit_point; i++)
+    {
+        labels[i] = a.newLabel();
+    }
 }
 
 void Generator::emit_update_nz(const asmjit::x86::Gpd& reg)
@@ -35,158 +76,141 @@ void Generator::emit_update_nz(const asmjit::x86::Gpd& reg)
     a.or_(Cpu::Status, Cpu::Temp2);
 }
 
-
-/*
-enum class AddressingMode
+void Generator::emit_return()
 {
-    Impl = 0,
-    Imm,
-    Zpg,
-    ZpgX,
-    ZpgY,
-    Abs,
-    AbsX,
-    AbsY,
-    Ind,
-    IndX,
-    IndY,
-    Rel,
-    Acc,
-};
-*/
+    a.ret();
+    should_stop = true;
+}
 
-uint8_t Generator::read() { return memory[pc++]; }
+uint8_t Generator::read()
+{
+    uint8_t result = rom.read_prg(pc);
+    pc += 1;
+
+    return result;
+}
 
 uint16_t Generator::read_u16()
 {
-    uint16_t low = memory[pc++];
-    uint16_t high = memory[pc++];
+    uint8_t result = rom.read_prg_u16(pc);
+    pc += 2;
 
-    return (high << 8) | low;
-}
-
-static void* addressing_Impl(Generator& generator) { return nullptr; }
-
-static asmjit::Imm addressing_Imm(Generator& generator) { return {generator.read()}; }
-
-static asmjit::x86::Mem addressing_Zpg(Generator& generator)
-{
-    uint64_t offset = generator.read();
-    return asmjit::x86::Mem(reinterpret_cast<uint64_t>(generator.memory.data()) + offset);
-};
-
-template <Op op, AddressingMode addr>
-static void emit(Generator& generator)
-{
-
+    return result;
 }
 
 template <AddressingMode addr>
-auto void get_operand(Generator& generator)
+static auto get_operand(Generator& gen)
 {
-    printf("0x%02x is not implemented!\n", op);
+    printf("Addressing mode %d is not implemented!\n", static_cast<int>(addr));
+    exit(1);
+
+    // Dummy value to stand out
+    return Address{69};
+}
+
+template <>
+auto get_operand<AddressingMode::Impl>(Generator& gen)
+{
+    return Impl{};
+}
+
+template <>
+auto get_operand<AddressingMode::Imm>(Generator& gen)
+{
+    return Imm{gen.read()};
+}
+
+template <>
+auto get_operand<AddressingMode::Zpg>(Generator& gen)
+{
+    return Address{gen.read()};
+}
+
+template <>
+auto get_operand<AddressingMode::Abs>(Generator& gen)
+{
+    return Address{gen.read_u16()};
+}
+
+template <Op op, typename Operand>
+static void emit_op(Generator& gen, Operand const& operand);
+
+template <Op op, typename Operand>
+void emit_op(Generator& gen, Operand const& operand)
+{
+    printf("Operand %u is not implemented!\n", static_cast<int>(op));
     exit(1);
 }
 
-
-template <Op op>
-static void emit_op(Generator& generator, const auto& operand)
+template <>
+void emit_op<Op::Lda>(Generator& gen, Imm const& operand)
 {
-    printf("0x%02x is not implemented!\n", op);
-    exit(1);
+    gen.a.mov(Cpu::A, operand.to_jit_imm());
 }
 
-static void emit_op<Op::Lda>(Generator &generator, const auto& operand)
+template <>
+void emit_op<Op::Lda>(Generator& gen, Address const& operand)
 {
-    generator.a.mov(Cpu::A, operand);
-    generator.emit_update_nz(Cpu::A);
+    gen.a.mov(Cpu::A, operand.to_jit_mem(gen));
 }
 
-// template <typename Operand>
-// static void emit_Ldx(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::X, operand);
-//     generator.emit_update_nz(Cpu::X);
-// }
-//
-// template <typename Operand>
-// static void emit_Ldy(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::Y, operand);
-//     generator.emit_update_nz(Cpu::Y);
-// }
-//
-// template <typename Operand>
-// static void emit_Sta(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::A, operand);
-// }
-//
-// template <typename Operand>
-// static void emit_Stx(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::A, operand);
-// }
-//
-// template <typename Operand>
-// static void emit_Sty(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::A, operand);
-// }
-//
-// template <typename Operand>
-// static void emit_Tax(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::X, Cpu::A);
-// }
-//
-// template <typename Operand>
-// static void emit_Tay(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::Y, Cpu::A);
-// }
-//
-// template <typename Operand>
-// static void emit_Txa(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::A, Cpu::X);
-// }
-//
-// template <typename Operand>
-// static void emit_Tya(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::A, Cpu::Y);
-// }
-//
-// template <typename Operand>
-// static void emit_Tsx(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::X, Cpu::S);
-// }
-//
-// template <typename Operand>
-// static void emit_Txs(Generator& generator, const Operand& operand)
-// {
-//     generator.a.mov(Cpu::S, Cpu::X);
-// }
+template <>
+void emit_op<Op::Ldx>(Generator& gen, Imm const& operand)
+{
+    gen.a.mov(Cpu::X, operand.to_jit_imm());
+}
 
-#define X(index, op, addressing_mode, size)                                                                            \
-    static void emit_##op##_##addressing_mode(Generator& generator)                                                    \
-    {                                                                                                                  \
-        auto operand = addressing_##addressing_mode(generator);                                                        \
-        emit_##op(generator, operand);                                                                                 \
+template <>
+void emit_op<Op::Ldx>(Generator& gen, Address const& operand)
+{
+    gen.a.mov(Cpu::X, operand.to_jit_mem(gen));
+}
+
+template <>
+void emit_op<Op::Ldy>(Generator& gen, Imm const& operand)
+{
+    gen.a.mov(Cpu::Y, operand.to_jit_imm());
+}
+
+template <>
+void emit_op<Op::Ldy>(Generator& gen, Address const& operand)
+{
+    gen.a.mov(Cpu::Y, operand.to_jit_mem(gen));
+}
+
+template <>
+void emit_op<Op::Jmp>(Generator& gen, Address const& operand)
+{
+    auto jump_target = operand.to_jit_label(gen);
+
+    if (jump_target.has_value())
+    {
+        gen.a.jmp(jump_target.value());
     }
-OPCODES
-#undef X
+    else
+    {
+        gen.a.mov(Cpu::PC, operand.value);
+        gen.emit_return();
+    }
+}
 
-static constexpr std::array<GeneratorOpFunc, NUM_OPCODES> emit_function_table = {
-#define X(index, op, addressing_mode, size) emit_##op_##addressing_mode,
+template <Op op, AddressingMode addr>
+static void emit_instruction(Generator& gen)
+{
+    auto operand = get_operand<addr>(gen);
+    emit_op<op>(gen, operand);
+}
+
+static constexpr std::array<EmitFn, NUM_OPCODES> emit_function_table = {
+#define X(index, op, addr, size) emit_instruction<Op::op, AddressingMode::addr>,
     OPCODES
 #undef X
 };
 
 void Generator::emit_next()
 {
-    uint8_t instr = 0;
-    emit_function_table[instr](*this);
+    uint8_t opcode = read();
+
+    printf("Emit %s\n", Instruction::to_string(opcode));
+    emit_function_table[opcode](*this);
 }

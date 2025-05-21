@@ -377,4 +377,5 @@ struct Instruction
     uint16_t size;
 
     static Instruction decode(uint8_t opcode);
+    static const char* to_string(uint8_t opcode);
 };
