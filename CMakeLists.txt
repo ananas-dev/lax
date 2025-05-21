@@ -14,7 +14,6 @@ add_subdirectory("vendor/SDL" EXCLUDE_FROM_ALL)
 add_executable(jit
         src/main.cpp
         src/Instruction.cpp
-        src/ByteStream.cpp
         src/Instruction.h
         src/Rom.cpp
         src/Analysis.cpp

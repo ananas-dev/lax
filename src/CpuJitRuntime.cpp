@@ -18,7 +18,7 @@ CpuJitRuntime::CpuJitRuntime(uint16_t pc, Rom* rom) : m_rom(rom)
     m_cpu_state.pc = pc;
 }
 
-void CpuJitRuntime::execute_next_bloc()
+void CpuJitRuntime::execute_next_block()
 {
     Analysis analysis(m_cpu_state.pc, m_rom);
     analysis.perform();

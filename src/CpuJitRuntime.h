@@ -22,7 +22,7 @@ class CpuJitRuntime {
 public:
     CpuJitRuntime(uint16_t pc, Rom *rom);
 
-    void execute_next_bloc();
+    void execute_next_block();
 
 private:
     void trampoline(JittedFunc f);
