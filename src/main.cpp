@@ -8,17 +8,16 @@
 #include "ByteStream.h"
 #include "Instruction.h"
 #include "Rom.h"
-#include "asmjit/arm/a64operand.h"
 
 using namespace asmjit;
 
 struct CpuState
 {
-    uint64_t a;
-    uint64_t x;
-    uint64_t y;
-    uint64_t s;
-    uint64_t status;
+    uint8_t a;
+    uint8_t x;
+    uint8_t y;
+    uint8_t s;
+    uint8_t status;
 };
 
 namespace Cpu
@@ -100,17 +99,17 @@ class FlowGraph
 void jit_trampoline(CpuState* cpu_state, Func f)
 {
     asm volatile(
-        "movq %c[a_off](%[cpu]), %%rax\n\t"
-        "movq %c[x_off](%[cpu]), %%rcx\n\t"
-        "movq %c[y_off](%[cpu]), %%rdx\n\t"
-        "movq %c[status_off](%[cpu]), %%rsi\n\t"
+        "movzbl %c[a_off](%[cpu]), %%rax\n\t"
+        "movzbl %c[x_off](%[cpu]), %%rcx\n\t"
+        "movzbl %c[y_off](%[cpu]), %%rdx\n\t"
+        "movzbl %c[status_off](%[cpu]), %%rsi\n\t"
 
         "call *%[func]\n\t"
 
-        "movq %%rax, %c[a_off](%[cpu])\n\t"
-        "movq %%rcx, %c[x_off](%[cpu])\n\t"
-        "movq %%rdx, %c[y_off](%[cpu])\n\t"
-        "movq %%rsi, %c[status_off](%[cpu])\n\t"
+        "movb %%rax, %c[a_off](%[cpu])\n\t"
+        "movb %%rcx, %c[x_off](%[cpu])\n\t"
+        "movb %%rdx, %c[y_off](%[cpu])\n\t"
+        "movb %%rsi, %c[status_off](%[cpu])\n\t"
         :
         : [cpu] "r"(cpu_state), [func] "r"(f), [a_off] "i"(offsetof(CpuState, a)), [x_off] "i"(offsetof(CpuState, x)),
           [y_off] "i"(offsetof(CpuState, y)), [status_off] "i"(offsetof(CpuState, status))
@@ -172,14 +171,6 @@ int main(int argc, char* argv[])
 
     uint16_t addr = 0xC000;
 
-    addr -= 0x8000;
-    if (addr >= 0x4000)
-    {
-        addr = addr % 0x4000;
-    }
-
-    analyse_function(rom->prg_rom, addr);
-
     if (!rom.has_value())
     {
         printf("Failed to parse rom!\n");
@@ -187,8 +178,15 @@ int main(int argc, char* argv[])
 
     RuntimeState rt_state;
 
-    // FIXME
-    uint16_t pc = 69;
+    addr -= 0x8000;
+    if (addr >= 0x4000)
+    {
+        addr = addr % 0x4000;
+    }
+
+    Analysis analysis(addr, rom->prg_rom);
+
+    analysis.perform();
 
     // LDA 16
     auto stream = ByteStream(code_bytes);
@@ -197,6 +195,8 @@ int main(int argc, char* argv[])
 
     // TODO: Generate all the jump labels
     std::unordered_map<uint16_t, Label> labels;
+
+    int pc = 0;
 
     switch (instruction.op)
     {

@@ -2,9 +2,9 @@
 
 typedef void (*AnalysisOpFn)(Analysis&);
 
-Analysis::Analysis(uint16_t entry_point) :
+Analysis::Analysis(uint16_t entry_point, std::span<uint8_t> memory) :
     entry_point(entry_point), pc(entry_point), last_nz_write(entry_point), last_carry_write(entry_point),
-    last_overflow_write(entry_point), furthest_branch(entry_point)
+    last_overflow_write(entry_point), furthest_conditional_branch(entry_point), memory(memory)
 {
 }
 
@@ -16,12 +16,30 @@ void Analysis::write_overflow() { last_overflow_write = pc; }
 
 void Analysis::read_nz() { instructions[last_overflow_write].set(InstructionMetadataFields::ShouldWriteNZ); }
 
-
 void Analysis::read_carry() { instructions[last_carry_write].set(InstructionMetadataFields::ShouldWriteCarry); }
 
 void Analysis::read_overflow()
 {
     instructions[last_overflow_write].set(InstructionMetadataFields::ShouldWriteOverflow);
+}
+
+void Analysis::terminal()
+{
+    if (pc > furthest_conditional_branch)
+    {
+        found_exit_point = true;
+    }
+}
+
+void Analysis::branch()
+{
+    auto offset = static_cast<int8_t>(memory[pc + 1]);
+    auto target = static_cast<uint16_t>(pc + static_cast<int16_t>(offset));
+
+    if (target > furthest_conditional_branch)
+    {
+        furthest_conditional_branch = target;
+    }
 }
 
 static void op_Adc(Analysis& analysis)
@@ -37,26 +55,62 @@ static void op_And(Analysis& analysis) { analysis.write_nz(); }
 
 static void op_Asl(Analysis& analysis) { analysis.write_nz(); }
 
-static void op_Bcc(Analysis& analysis) { analysis.read_carry(); }
+static void op_Bcc(Analysis& analysis)
+{
+    analysis.read_carry();
+    analysis.branch();
+}
 
-static void op_Bcs(Analysis& analysis) { analysis.read_carry(); }
+static void op_Bcs(Analysis& analysis)
+{
+    analysis.read_carry();
+    analysis.branch();
+}
 
-static void op_Beq(Analysis& analysis) { analysis.read_nz(); }
+static void op_Beq(Analysis& analysis)
+{
+    analysis.read_nz();
+    analysis.branch();
+}
 
-static void op_Bit(Analysis& analysis) { analysis.read_nz(); }
+static void op_Bit(Analysis& analysis)
+{
+    analysis.read_nz();
+    analysis.branch();
+}
 
-static void op_Bmi(Analysis& analysis) { analysis.read_nz(); }
+static void op_Bmi(Analysis& analysis)
+{
+    analysis.read_nz();
+    analysis.branch();
+}
 
-static void op_Bne(Analysis& analysis) { analysis.read_nz(); }
+static void op_Bne(Analysis& analysis)
+{
+    analysis.read_nz();
+    analysis.branch();
+}
 
-static void op_Bpl(Analysis& analysis) { analysis.read_nz(); }
+static void op_Bpl(Analysis& analysis)
+{
+    analysis.read_nz();
+    analysis.branch();
+}
+
+static void op_Bvc(Analysis& analysis)
+{
+    analysis.read_overflow();
+    analysis.branch();
+}
+
+static void op_Bvs(Analysis& analysis)
+{
+    analysis.read_overflow();
+    analysis.branch();
+}
 
 // TODO
-static void op_Brk(Analysis& analysis) {}
-
-static void op_Bvc(Analysis& analysis) { analysis.read_overflow(); }
-
-static void op_Bvs(Analysis& analysis) { analysis.read_overflow(); }
+static void op_Brk(Analysis& analysis) { analysis.terminal(); }
 
 static void op_Clc(Analysis& analysis) { analysis.read_carry(); }
 
@@ -65,16 +119,14 @@ static void op_Cld(Analysis& analysis) {}
 
 static void op_Cli(Analysis& analysis) {}
 
-static void op_Clv(Analysis& analysis)
-{
-    analysis.write_carry();
-}
+static void op_Clv(Analysis& analysis) { analysis.write_carry(); }
 
 static void op_Cmp(Analysis& analysis)
 {
     analysis.write_carry();
     analysis.write_nz();
 }
+
 static void op_Cpx(Analysis& analysis) {}
 static void op_Cpy(Analysis& analysis) {}
 static void op_Dec(Analysis& analysis) {}
@@ -84,8 +136,10 @@ static void op_Eor(Analysis& analysis) {}
 static void op_Inc(Analysis& analysis) {}
 static void op_Inx(Analysis& analysis) {}
 static void op_Iny(Analysis& analysis) {}
-static void op_Jmp(Analysis& analysis) {}
-static void op_Jsr(Analysis& analysis) {}
+
+static void op_Jmp(Analysis& analysis) { analysis.terminal(); }
+
+static void op_Jsr(Analysis& analysis) { analysis.terminal(); }
 static void op_Lda(Analysis& analysis) {}
 static void op_Ldx(Analysis& analysis) {}
 static void op_Ldy(Analysis& analysis) {}
@@ -98,8 +152,11 @@ static void op_Pla(Analysis& analysis) {}
 static void op_Plp(Analysis& analysis) {}
 static void op_Rol(Analysis& analysis) {}
 static void op_Ror(Analysis& analysis) {}
-static void op_Rti(Analysis& analysis) {}
-static void op_Rts(Analysis& analysis) {}
+
+static void op_Rti(Analysis& analysis) { analysis.terminal(); }
+
+static void op_Rts(Analysis& analysis) { analysis.terminal(); }
+
 static void op_Sbc(Analysis& analysis) {}
 static void op_Sec(Analysis& analysis) {}
 static void op_Sed(Analysis& analysis) {}
@@ -139,13 +196,8 @@ static constexpr std::array<AnalysisOpFn, NUM_OPCODES> analysis_op_table = {
 #undef X
 };
 
-uint16_t Analysis::perform(std::span<uint8_t> memory)
+uint16_t Analysis::perform()
 {
-    uint16_t furthest_branch = 0;
-    bool found_exit_point = false;
-
-    uint16_t pc = entry_point;
-
     while (!found_exit_point)
     {
         uint8_t opcode = memory[pc];

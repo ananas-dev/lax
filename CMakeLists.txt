@@ -8,6 +8,8 @@ set(CMAKE_CXX_FLAGS "-fno-exceptions")
 set(ASMJIT_STATIC TRUE)
 
 add_subdirectory("vendor/asmjit")
+add_subdirectory("vendor/SDL" EXCLUDE_FROM_ALL)
+
 
 add_executable(jit
         src/main.cpp
@@ -18,8 +20,11 @@ add_executable(jit
         src/Analysis.cpp
         src/Analysis.h
         src/Bitset8.h
+        src/Generator.cpp
+        src/Generator.h
 )
 
 target_link_libraries(jit
         asmjit::asmjit
+        SDL3::SDL3
 )
