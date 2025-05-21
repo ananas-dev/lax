@@ -20,9 +20,9 @@ enum class InstructionMetadataFields
 
 struct Analysis
 {
-    explicit Analysis(uint16_t entry_point, Rom rom);
+    explicit Analysis(uint16_t entry_point, Rom* rom);
 
-    Rom rom;
+    Rom* rom;
 
     uint16_t entry_point;
     uint16_t pc;

@@ -60,13 +60,20 @@ std::optional<Rom> Rom::from_file(std::string const& path)
 
 uint8_t Rom::read_prg(uint16_t pc) const
 {
-    if (pc < 0x8000 || pc >= 0xFFFA)
+    if (pc < 0x8000 || pc > 0xFFFF)
     {
         printf("Out of bounds prg read!\n");
         return 0;
     }
 
-    return prg_rom[pc - 0x8000];
+    pc -= 0x8000;
+
+    // Mirror if needed
+    if (prg_rom.size() == 0x4000 && pc >= 0x4000) {
+        pc = pc % 0x4000;
+    }
+
+    return prg_rom[pc];
 }
 
 uint16_t Rom::read_prg_u16(uint16_t pc) const

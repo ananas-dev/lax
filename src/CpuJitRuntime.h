@@ -1,9 +1,14 @@
 #pragma once
 
-#include <cinttypes>
+#include <array>
+
+#include "Rom.h"
+#include "asmjit/core/jitruntime.h"
+#include "asmjit/core/logger.h"
 
 struct CpuState
 {
+    uint16_t pc;
     uint8_t a;
     uint8_t x;
     uint8_t y;
@@ -15,8 +20,17 @@ typedef void (*JittedFunc)();
 
 class CpuJitRuntime {
 public:
+    CpuJitRuntime(uint16_t pc, Rom *rom);
+
+    void execute_next_bloc();
 
 private:
-    void trampoline();
-    uint16_t m_pc;
+    void trampoline(JittedFunc f);
+
+    asmjit::JitRuntime m_jit_runtime{};
+    asmjit::CodeHolder m_code_holder{};
+    asmjit::FileLogger m_logger{stdout};
+    CpuState m_cpu_state{};
+    std::array<uint8_t, 0x800> m_ram{};
+    Rom *m_rom;
 };

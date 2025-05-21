@@ -2,8 +2,8 @@
 
 typedef void (*AnalysisOpFn)(Analysis&);
 
-Analysis::Analysis(uint16_t entry_point, Rom rom) :
-    rom(std::move(rom)), entry_point(entry_point), pc(entry_point), last_nz_write(entry_point),
+Analysis::Analysis(uint16_t entry_point, Rom *rom) :
+    rom(rom), entry_point(entry_point), pc(entry_point), last_nz_write(entry_point),
     last_carry_write(entry_point), last_overflow_write(entry_point), furthest_conditional_branch(entry_point)
 {
 }
@@ -33,8 +33,8 @@ void Analysis::terminal()
 
 void Analysis::branch()
 {
-    auto offset = static_cast<int8_t>(memory[pc + 1]);
-    auto target = static_cast<uint16_t>(pc + static_cast<int16_t>(offset));
+    auto offset = static_cast<int8_t>(rom->read_prg(pc + 1));
+    auto target = static_cast<uint16_t>(pc + 2 + static_cast<int16_t>(offset));
 
     if (target > furthest_conditional_branch)
     {
@@ -200,7 +200,7 @@ uint16_t Analysis::perform()
 {
     while (!found_exit_point)
     {
-        uint8_t opcode = memory[pc];
+        uint8_t opcode = rom->read_prg(pc);
 
         auto instruction = Instruction::decode(opcode);
 

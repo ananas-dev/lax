@@ -22,10 +22,7 @@ struct Address
     uint16_t value;
     explicit Address(uint16_t value) : value(value) {};
 
-    [[nodiscard]] asmjit::x86::Mem to_jit_mem(Generator& gen) const
-    {
-        return asmjit::x86::Mem(reinterpret_cast<uint64_t>(gen.pc.data()) + value);
-    }
+    [[nodiscard]] asmjit::x86::Mem to_jit_mem(Generator& gen) const { return asmjit::x86::Mem(gen.ram_ptr(value)); }
 
     [[nodiscard]] std::optional<asmjit::Label> to_jit_label(Generator& gen) const
     {
@@ -42,15 +39,15 @@ struct Impl
 {
 };
 
-Generator::Generator(Analysis analysis, asmjit::x86::Assembler& a) :
+Generator::Generator(Analysis analysis, asmjit::x86::Assembler& a, std::array<uint8_t, 0x800>& ram) :
     pc(analysis.entry_point), entry_point(analysis.entry_point), exit_point(analysis.pc),
-    instructions(std::move(analysis.instructions)), rom(std::move(analysis.rom)), a(a)
+    instructions(std::move(analysis.instructions)), ram(ram), rom(analysis.rom), a(a)
 {
     std::vector<asmjit::Label> labels(exit_point - entry_point);
 
     for (uint16_t i = entry_point; i < exit_point; i++)
     {
-        labels[i] = a.newLabel();
+        labels.push_back(a.newLabel());
     }
 }
 
@@ -84,7 +81,7 @@ void Generator::emit_return()
 
 uint8_t Generator::read()
 {
-    uint8_t result = rom.read_prg(pc);
+    uint8_t result = rom->read_prg(pc);
     pc += 1;
 
     return result;
@@ -92,10 +89,22 @@ uint8_t Generator::read()
 
 uint16_t Generator::read_u16()
 {
-    uint8_t result = rom.read_prg_u16(pc);
+    uint8_t result = rom->read_prg_u16(pc);
     pc += 2;
 
     return result;
+}
+
+uint64_t Generator::ram_ptr(uint16_t address)
+{
+    if (address > 0x3FFF)
+    {
+        printf("Ram read out of bounds!\n");
+        return 0;
+    }
+
+    uint16_t mirror_down_addr = address & 0b0000011111111111;
+    return reinterpret_cast<uint64_t>(ram.data()) + mirror_down_addr;
 }
 
 template <AddressingMode addr>

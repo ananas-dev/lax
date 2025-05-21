@@ -19,26 +19,29 @@ namespace Cpu
 class Generator
 {
 public:
-    explicit Generator(Analysis analysis, asmjit::x86::Assembler &a);
+    explicit Generator(Analysis analysis, asmjit::x86::Assembler& a, std::array<uint8_t, 0x800>& ram);
     void emit_next();
 
     uint16_t pc;
     uint16_t entry_point;
     uint16_t exit_point;
     std::unordered_map<uint16_t, Bitset8<InstructionMetadataFields>> instructions;
-    Rom rom;
-    asmjit::x86::Assembler &a;
+    std::array<uint8_t, 0x800>& ram;
+    Rom* rom;
+    asmjit::x86::Assembler& a;
 
     bool should_stop{false};
 
     std::vector<asmjit::Label> labels;
 
-    uint8_t Generator::read();
-    uint16_t Generator::read_u16();
+    uint8_t read();
+    uint16_t read_u16();
 
     void emit_update_nz(const asmjit::x86::Gpd& reg);
 
     void emit_return();
+
+    uint64_t ram_ptr(uint16_t address);
 
     void generate()
     {
