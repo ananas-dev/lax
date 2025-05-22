@@ -9,6 +9,8 @@
 
 typedef void (*EmitFn)(Generator&);
 
+constexpr auto STACK_ADDRESS = 0x0100;
+
 struct Imm
 {
     uint8_t value;
@@ -22,13 +24,23 @@ struct Address
     uint16_t value;
     explicit Address(uint16_t value) : value(value) {};
 
-    [[nodiscard]] asmjit::x86::Mem to_jit_mem(Generator& gen) const { return asmjit::x86::Mem(gen.ram_ptr(value)); }
+    [[nodiscard]] asmjit::x86::Mem to_jit_mem(Generator& gen) const
+    {
+        if (value > 0x3FFF)
+        {
+            printf("Ram read out of bounds!\n");
+            return asmjit::x86::byte_ptr(69);
+        }
+
+        uint16_t mirror_down_addr = value & 0b0000011111111111;
+        return asmjit::x86::byte_ptr(Cpu::MemoryBase, mirror_down_addr);
+    }
 
     [[nodiscard]] std::optional<asmjit::Label> to_jit_label(Generator& gen) const
     {
         if (value >= gen.entry_point && value < gen.exit_point)
         {
-            return gen.labels[gen.entry_point - value];
+            return gen.labels[value - gen.entry_point];
         }
 
         return {};
@@ -89,23 +101,27 @@ uint8_t Generator::read()
 
 uint16_t Generator::read_u16()
 {
-    uint8_t result = rom->read_prg_u16(pc);
+    uint16_t result = rom->read_prg_u16(pc);
     pc += 2;
 
     return result;
 }
 
-uint64_t Generator::ram_ptr(uint16_t address)
+void Generator::emit_stack_push(uint8_t value)
 {
-    if (address > 0x3FFF)
-    {
-        printf("Ram read out of bounds!\n");
-        return 0;
-    }
-
-    uint16_t mirror_down_addr = address & 0b0000011111111111;
-    return reinterpret_cast<uint64_t>(ram.data()) + mirror_down_addr;
+    a.mov(byte_ptr(Cpu::MemoryBase, Cpu::S.r64(), 0, STACK_ADDRESS), value);
+    a.dec(Cpu::S.r8());
 }
+
+void Generator::emit_stack_push_address(uint16_t address)
+{
+    auto high = static_cast<uint8_t>(address >> 8);
+    auto low = static_cast<uint8_t>(address & 0xFF);
+
+    emit_stack_push(high);
+    emit_stack_push(low);
+}
+
 
 template <AddressingMode addr>
 static auto get_operand(Generator& gen)
@@ -115,12 +131,6 @@ static auto get_operand(Generator& gen)
 
     // Dummy value to stand out
     return Address{69};
-}
-
-template <>
-auto get_operand<AddressingMode::Impl>(Generator& gen)
-{
-    return Impl{};
 }
 
 template <>
@@ -144,8 +154,18 @@ auto get_operand<AddressingMode::Abs>(Generator& gen)
 template <Op op, typename Operand>
 static void emit_op(Generator& gen, Operand const& operand);
 
+template <Op op>
+static void emit_op(Generator& gen);
+
 template <Op op, typename Operand>
 void emit_op(Generator& gen, Operand const& operand)
+{
+    printf("Operand %u is not implemented!\n", static_cast<int>(op));
+    exit(1);
+}
+
+template <Op op>
+static void emit_op(Generator& gen)
 {
     printf("Operand %u is not implemented!\n", static_cast<int>(op));
     exit(1);
@@ -155,36 +175,60 @@ template <>
 void emit_op<Op::Lda>(Generator& gen, Imm const& operand)
 {
     gen.a.mov(Cpu::A, operand.to_jit_imm());
+    gen.emit_update_nz(Cpu::A);
 }
 
 template <>
 void emit_op<Op::Lda>(Generator& gen, Address const& operand)
 {
-    gen.a.mov(Cpu::A, operand.to_jit_mem(gen));
+    gen.a.mov(Cpu::A.r8(), operand.to_jit_mem(gen));
+    gen.emit_update_nz(Cpu::A);
 }
 
 template <>
 void emit_op<Op::Ldx>(Generator& gen, Imm const& operand)
 {
     gen.a.mov(Cpu::X, operand.to_jit_imm());
+    gen.emit_update_nz(Cpu::X);
 }
 
 template <>
 void emit_op<Op::Ldx>(Generator& gen, Address const& operand)
 {
-    gen.a.mov(Cpu::X, operand.to_jit_mem(gen));
+    gen.a.mov(Cpu::X.r8(), operand.to_jit_mem(gen));
+    gen.emit_update_nz(Cpu::X);
 }
 
 template <>
 void emit_op<Op::Ldy>(Generator& gen, Imm const& operand)
 {
     gen.a.mov(Cpu::Y, operand.to_jit_imm());
+    gen.emit_update_nz(Cpu::Y);
 }
 
 template <>
 void emit_op<Op::Ldy>(Generator& gen, Address const& operand)
 {
-    gen.a.mov(Cpu::Y, operand.to_jit_mem(gen));
+    gen.a.mov(Cpu::Y.r8(), operand.to_jit_mem(gen));
+    gen.emit_update_nz(Cpu::Y);
+}
+
+template <>
+void emit_op<Op::Sta>(Generator& gen, Address const& operand)
+{
+    gen.a.mov(operand.to_jit_mem(gen), Cpu::A.r8());
+}
+
+template <>
+void emit_op<Op::Stx>(Generator& gen, Address const& operand)
+{
+    gen.a.mov(operand.to_jit_mem(gen), Cpu::X.r8());
+}
+
+template <>
+void emit_op<Op::Sty>(Generator& gen, Address const& operand)
+{
+    gen.a.mov(operand.to_jit_mem(gen), Cpu::Y.r8());
 }
 
 template <>
@@ -203,11 +247,31 @@ void emit_op<Op::Jmp>(Generator& gen, Address const& operand)
     }
 }
 
+template <>
+void emit_op<Op::Jsr>(Generator& gen, Address const& operand)
+{
+    gen.emit_stack_push_address(gen.pc - 1);
+    gen.a.mov(Cpu::PC, operand.value);
+    gen.emit_return();
+}
+
+template <>
+void emit_op<Op::Nop>(Generator& gen)
+{
+}
+
 template <Op op, AddressingMode addr>
 static void emit_instruction(Generator& gen)
 {
-    auto operand = get_operand<addr>(gen);
-    emit_op<op>(gen, operand);
+    if constexpr (addr == AddressingMode::Impl)
+    {
+        emit_op<op>(gen);
+    }
+    else
+    {
+        auto operand = get_operand<addr>(gen);
+        emit_op<op>(gen, operand);
+    }
 }
 
 static constexpr std::array<EmitFn, NUM_OPCODES> emit_function_table = {

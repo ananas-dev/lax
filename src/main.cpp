@@ -23,6 +23,7 @@ int main(int argc, char* argv[])
 
     cpu.execute_next_block();
     cpu.execute_next_block();
+    cpu.execute_next_block();
 
     return 0;
 }

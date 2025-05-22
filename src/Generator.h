@@ -14,6 +14,7 @@ namespace Cpu
     static constexpr auto Temp1 = asmjit::x86::r9d;
     static constexpr auto Temp2 = asmjit::x86::r10d;
     static constexpr auto Temp3 = asmjit::x86::r11d;
+    static constexpr auto MemoryBase = asmjit::x86::r12;
 } // namespace Cpu
 
 class Generator
@@ -41,7 +42,10 @@ public:
 
     void emit_return();
 
-    uint64_t ram_ptr(uint16_t address);
+    void emit_stack_push(uint8_t value);
+    void emit_stack_push_address(uint16_t address);
+
+    static uint64_t memory_offset(uint16_t address);
 
     void generate()
     {

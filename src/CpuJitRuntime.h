@@ -28,7 +28,6 @@ private:
     void trampoline(JittedFunc f);
 
     asmjit::JitRuntime m_jit_runtime{};
-    asmjit::CodeHolder m_code_holder{};
     asmjit::FileLogger m_logger{stdout};
     CpuState m_cpu_state{};
     std::array<uint8_t, 0x800> m_ram{};
