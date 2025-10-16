@@ -18,7 +18,7 @@ FetchContent_MakeAvailable(SDL3)
 FetchContent_Declare(
         asmjit
         GIT_REPOSITORY https://github.com/asmjit/asmjit
-        GIT_TAG cecc73f2979e9704c81a2c2ec79a7475b31c56ac
+        GIT_TAG 5134d396bd00c1b63259387acdbb12dfdf009f9b
 )
 
 FetchContent_MakeAvailable(asmjit)

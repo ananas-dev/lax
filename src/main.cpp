@@ -21,9 +21,10 @@ int main(int argc, char* argv[])
 
     CpuJitRuntime cpu(addr, &rom.value());
 
-    cpu.execute_next_block();
-    cpu.execute_next_block();
-    cpu.execute_next_block();
+    while (true)
+    {
+        cpu.execute_next_block();
+    }
 
     return 0;
 }

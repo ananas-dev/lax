@@ -17,6 +17,65 @@ namespace Cpu
     static constexpr auto MemoryBase = asmjit::x86::r12;
 } // namespace Cpu
 
+enum class StatusFlag : uint8_t
+{
+    Carry = 1 << 0,
+    Zero = 1 << 1,
+    InterruptDisable = 1 << 2,
+    Decimal = 1 << 3,
+    Overflow = 1 << 6,
+    Negative = 1 << 7
+};
+
+inline StatusFlag operator|(StatusFlag lhs, StatusFlag rhs)
+{
+    using T = std::underlying_type_t<StatusFlag>;
+    return static_cast<StatusFlag>(static_cast<T>(lhs) | static_cast<T>(rhs));
+}
+
+inline StatusFlag operator&(StatusFlag lhs, StatusFlag rhs)
+{
+    using T = std::underlying_type_t<StatusFlag>;
+    return static_cast<StatusFlag>(static_cast<T>(lhs) & static_cast<T>(rhs));
+}
+
+inline StatusFlag operator~(StatusFlag flag)
+{
+    using T = std::underlying_type_t<StatusFlag>;
+    return static_cast<StatusFlag>(~static_cast<T>(flag));
+}
+
+struct Generator;
+
+struct Imm
+{
+    uint8_t value;
+    explicit Imm(uint8_t value) : value(value) {};
+
+    [[nodiscard]] asmjit::Imm to_jit_imm() const { return asmjit::Imm{value}; }
+};
+
+struct Address
+{
+    uint16_t value;
+    explicit Address(uint16_t value) : value(value) {};
+
+    [[nodiscard]] asmjit::x86::Mem to_jit_mem() const
+    {
+        if (value > 0x3FFF)
+        {
+            printf("Ram read out of bounds!\n");
+            return asmjit::x86::byte_ptr(69);
+        }
+
+        uint16_t mirror_down_addr = value & 0b0000011111111111;
+        return asmjit::x86::byte_ptr(Cpu::MemoryBase, mirror_down_addr);
+    }
+
+    [[nodiscard]] std::optional<asmjit::Label> to_jit_label(Generator& gen) const;
+};
+
+
 class Generator
 {
 public:
@@ -33,19 +92,21 @@ public:
 
     bool should_stop{false};
 
-    std::vector<asmjit::Label> labels;
+    std::vector<asmjit::Label> labels{};
 
     uint8_t read();
     uint16_t read_u16();
 
-    void emit_update_nz(const asmjit::x86::Gpd& reg);
-
-    void emit_return();
+    void emit_update_nz(const asmjit::x86::Gp& reg);
 
     void emit_stack_push(uint8_t value);
     void emit_stack_push_address(uint16_t address);
 
-    static uint64_t memory_offset(uint16_t address);
+    void emit_stack_pop(const asmjit::x86::Gp& dst);
+    void emit_stack_pop_address(const asmjit::x86::Gp& dst);
+
+    void emit_branch_if_set(StatusFlag flag, Address const& target);
+    void emit_branch_if_clear(StatusFlag flag, Address const& target);
 
     void generate()
     {
@@ -53,8 +114,12 @@ public:
 
         while (pc < exit_point && !should_stop)
         {
-            printf("PC: %u\n", pc);
+            printf("PC: %04X\n", pc);
             emit_next();
         }
+
+        // Debug fallback
+        a.mov(Cpu::PC, pc);
+        a.ret();
     }
 };

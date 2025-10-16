@@ -38,6 +38,7 @@ struct Analysis
     std::unordered_map<uint16_t, Bitset8<InstructionMetadataFields>> instructions{};
 
     uint16_t perform();
+    void perform_debug();
 
     void write_nz();
     void write_carry();

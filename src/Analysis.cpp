@@ -2,9 +2,9 @@
 
 typedef void (*AnalysisOpFn)(Analysis&);
 
-Analysis::Analysis(uint16_t entry_point, Rom *rom) :
-    rom(rom), entry_point(entry_point), pc(entry_point), last_nz_write(entry_point),
-    last_carry_write(entry_point), last_overflow_write(entry_point), furthest_conditional_branch(entry_point)
+Analysis::Analysis(uint16_t entry_point, Rom* rom) :
+    rom(rom), entry_point(entry_point), pc(entry_point), last_nz_write(entry_point), last_carry_write(entry_point),
+    last_overflow_write(entry_point), furthest_conditional_branch(entry_point)
 {
 }
 
@@ -209,5 +209,16 @@ uint16_t Analysis::perform()
         pc += instruction.size;
     }
 
-    return pc - 1;
+    return pc;
+}
+
+void Analysis::perform_debug()
+{
+    uint8_t opcode = rom->read_prg(pc);
+
+    auto instruction = Instruction::decode(opcode);
+
+    analysis_op_table[opcode](*this);
+
+    pc += instruction.size;
 }

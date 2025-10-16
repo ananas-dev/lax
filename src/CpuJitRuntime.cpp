@@ -19,11 +19,11 @@ void CpuJitRuntime::execute_next_block()
 {
     asmjit::CodeHolder code;
 
-    code.init(m_jit_runtime.environment(), m_jit_runtime.cpuFeatures());
-    code.setLogger(&m_logger);
+    code.init(m_jit_runtime.environment(), m_jit_runtime.cpu_features());
+    code.set_logger(&m_logger);
 
     Analysis analysis(m_cpu_state.pc, m_rom);
-    analysis.perform();
+    analysis.perform_debug();
 
     asmjit::x86::Assembler a(&code);
 
@@ -33,9 +33,9 @@ void CpuJitRuntime::execute_next_block()
     JittedFunc f;
     asmjit::Error err = m_jit_runtime.add(&f, &code);
 
-    if (err)
+    if (err != asmjit::Error::kOk)
     {
-        printf("AsmJit failed: %s\n", asmjit::DebugUtils::errorAsString(err));
+        printf("AsmJit failed: %s\n", asmjit::DebugUtils::error_as_string(err));
         return;
     };
 
